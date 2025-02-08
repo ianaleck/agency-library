@@ -3,6 +3,7 @@
 namespace Agency\Auth\Providers;
 
 use Agency\Auth\ClerkService;
+use Agency\Auth\Console\Commands\SetupAgency;  // Add this
 use Agency\Auth\Middleware\AuthenticateWithClerk;
 use Agency\Auth\Middleware\CheckPermissions;
 use Illuminate\Support\ServiceProvider;
@@ -10,6 +11,11 @@ use Illuminate\Contracts\Http\Kernel;
 
 class AgencyServiceProvider extends ServiceProvider
 {
+
+    protected $commands = [
+        SetupAgency::class
+    ];
+
     /**
      * Register services.
      */
@@ -20,6 +26,11 @@ class AgencyServiceProvider extends ServiceProvider
             dirname(__DIR__, 3) . '/config/auth.php', 
             'agency.auth'
         );
+
+        // Register commands
+        if ($this->app->runningInConsole()) {
+            $this->commands($this->commands);
+        }
 
         // Register Clerk service
         $this->app->singleton(ClerkService::class, function ($app) {

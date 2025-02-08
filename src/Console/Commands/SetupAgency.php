@@ -1,6 +1,6 @@
 <?php
 
-namespace Agency\Console\Commands;
+namespace Agency\Auth\Console\Commands;
 
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\File;
@@ -158,10 +158,12 @@ MODEL;
         $this->info('Setting up configuration...');
         
         if (!File::isDirectory(config_path('agency'))) {
-            File::makeDirectory(config_path('agency'));
+            File::makeDirectory(config_path('agency'), 0755, true);
         }
 
         $configPath = config_path('agency/auth.php');
+        $vendorPath = dirname(__DIR__, 4);
+        $packageConfigPath = $vendorPath . '/config/auth.php';
 
         if (File::exists($configPath) && !$this->option('no-interaction')) {
             if (!$this->confirm('Auth configuration already exists. Do you want to overwrite it?')) {
@@ -169,7 +171,12 @@ MODEL;
             }
         }
 
-        File::copy(__DIR__.'/../../../config/auth.php', $configPath);
+        if (!File::exists($packageConfigPath)) {
+            $this->error('Configuration file not found in package');
+            return;
+        }
+
+        File::copy($packageConfigPath, $configPath);
         $this->info('Configuration published successfully.');
     }
 
@@ -177,35 +184,38 @@ MODEL;
     {
         $this->info('Setting up migrations...');
 
-        $migrationsPath = database_path('migrations');
         $timestamp = date('Y_m_d_His');
+        $vendorPath = dirname(__DIR__, 4);
 
         // User columns migration
         $this->createMigration(
-            'add_clerk_user_columns.php.stub',
-            "{$timestamp}_add_clerk_user_columns.php"
+            $vendorPath . '/database/migrations/add_clerk_user_columns.php.stub',
+            database_path("migrations/{$timestamp}_add_clerk_user_columns.php")
         );
 
         // Organization tables migration
         $timestamp = date('Y_m_d_His', strtotime('+1 second'));
         $this->createMigration(
-            'create_clerk_organizations_table.php.stub',
-            "{$timestamp}_create_clerk_organizations_table.php"
+            $vendorPath . '/database/migrations/create_clerk_organizations_table.php.stub',
+            database_path("migrations/{$timestamp}_create_clerk_organizations_table.php")
         );
     }
 
     private function createMigration($source, $destination)
     {
-        $migrationSource = __DIR__."/../../../database/migrations/{$source}";
-        $migrationDestination = database_path("migrations/{$destination}");
+        if (!File::exists($source)) {
+            $this->error("Migration source not found: {$source}");
+            return;
+        }
 
-        if (File::exists($migrationDestination) && !$this->option('no-interaction')) {
-            if (!$this->confirm("Migration {$source} already exists. Do you want to overwrite it?")) {
+        if (File::exists($destination) && !$this->option('no-interaction')) {
+            if (!$this->confirm("Migration already exists at {$destination}. Do you want to overwrite it?")) {
                 return;
             }
         }
 
-        File::copy($migrationSource, $migrationDestination);
+        File::copy($source, $destination);
+        $this->info("Migration created: " . basename($destination));
     }
 
     private function setupMiddleware()
@@ -213,6 +223,12 @@ MODEL;
         $this->info('Setting up middleware...');
 
         $kernelPath = app_path('Http/Kernel.php');
+        
+        if (!File::exists($kernelPath)) {
+            $this->error('Kernel.php not found');
+            return;
+        }
+
         $kernelContents = File::get($kernelPath);
 
         if (!str_contains($kernelContents, 'clerk.auth')) {
@@ -229,6 +245,8 @@ MODEL;
 
             File::put($kernelPath, $kernelContents);
             $this->info('Middleware registered successfully.');
+        } else {
+            $this->info('Middleware already registered.');
         }
     }
 
